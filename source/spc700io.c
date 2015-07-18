@@ -16,142 +16,104 @@
     with blargSnes. If not, see http://www.gnu.org/licenses/.
 */
 
-#include <3ds/types.h>
 
-#include "snes.h"
-#include "spc700.h"
-#include "dsp.h"
+}#ifndef _65C816_H_
+#define _65C816_H_
 
+#define Carry		1
+#define Zero		2
+#define IRQ			4
+#define Decimal		8
+#define IndexFlag	16
+#define MemoryFlag	32
+#define Overflow	64
+#define Negative	128
+#define Emulation	256
 
-u8 SPC_ROMAccess;
-u8 SPC_DSPAddr;
+#define SetCarry()			(ICPU._Carry = 1)
+#define ClearCarry()		(ICPU._Carry = 0)
+#define SetZero()			(ICPU._Zero = 0)
+#define ClearZero()			(ICPU._Zero = 1)
+#define SetIRQ()			(Registers.PL |= IRQ)
+#define ClearIRQ()			(Registers.PL &= ~IRQ)
+#define SetDecimal()		(Registers.PL |= Decimal)
+#define ClearDecimal()		(Registers.PL &= ~Decimal)
+#define SetIndex()			(Registers.PL |= IndexFlag)
+#define ClearIndex()		(Registers.PL &= ~IndexFlag)
+#define SetMemory()			(Registers.PL |= MemoryFlag)
+#define ClearMemory()		(Registers.PL &= ~MemoryFlag)
+#define SetOverflow()		(ICPU._Overflow = 1)
+#define ClearOverflow()		(ICPU._Overflow = 0)
+#define SetNegative()		(ICPU._Negative = 0x80)
+#define ClearNegative()		(ICPU._Negative = 0)
 
+#define CheckCarry()		(ICPU._Carry)
+#define CheckZero()			(ICPU._Zero == 0)
+#define CheckIRQ()			(Registers.PL & IRQ)
+#define CheckDecimal()		(Registers.PL & Decimal)
+#define CheckIndex()		(Registers.PL & IndexFlag)
+#define CheckMemory()		(Registers.PL & MemoryFlag)
+#define CheckOverflow()		(ICPU._Overflow)
+#define CheckNegative()		(ICPU._Negative & 0x80)
+#define CheckEmulation()	(Registers.P.W & Emulation)
 
-void SPC_InitMisc()
+#define SetFlags(f)			(Registers.P.W |= (f))
+#define ClearFlags(f)		(Registers.P.W &= ~(f))
+#define CheckFlag(f)		(Registers.PL & (f))
+
+typedef union
 {
-	SPC_ROMAccess = 1;
-	SPC_DSPAddr = 0;
-	
-	memset(&SPC_RAM[0], 0, 0x10040);
-	memcpy(&SPC_RAM[0xFFC0], &SPC_ROM[0], 64);
-	
-	*(u32*)&SPC_IOPorts[0] = 0;
-	*(u32*)&SPC_IOPorts[4] = 0;
-	
-	SPC_TimerEnable = 0;
-	SPC_TimerReload[0] = 0;
-	SPC_TimerReload[1] = 0;
-	SPC_TimerReload[2] = 0;
-	SPC_TimerVal[0].Val = 0;
-	SPC_TimerVal[1].Val = 0;
-	SPC_TimerVal[2].Val = 0;
-	
-	SPC_ElapsedCycles = 0;
-	
-	DspReset();
-}
+#ifdef LSB_FIRST
+	struct { uint8	l, h; } B;
+#else
+	struct { uint8	h, l; } B;
+#endif
+	uint16	W;
+}	pair;
 
-u8 SPC_IORead8(u16 addr)
+typedef union
 {
-	u8 ret = 0;
-	switch (addr)
-	{
-		case 0xF2: ret = SPC_DSPAddr; break;
-		case 0xF3: ret = DSP_MEM[SPC_DSPAddr]; break;
-		
-		case 0xF4: ret = SPC_IOPorts[0]; break;
-		case 0xF5: ret = SPC_IOPorts[1]; break;
-		case 0xF6: ret = SPC_IOPorts[2]; break;
-		case 0xF7: ret = SPC_IOPorts[3]; break;
-		
-		case 0xFD: ret = SPC_TimerVal[0].HighPart & 0x0F; SPC_TimerVal[0].HighPart = 0; break;
-		case 0xFE: ret = SPC_TimerVal[1].HighPart & 0x0F; SPC_TimerVal[1].HighPart = 0; break;
-		case 0xFF: ret = SPC_TimerVal[2].HighPart & 0x0F; SPC_TimerVal[2].HighPart = 0; break;
-	}
+#ifdef LSB_FIRST
+	struct { uint8	xPCl, xPCh, xPB, z; } B;
+	struct { uint16	xPC, d; } W;
+#else
+	struct { uint8	z, xPB, xPCh, xPCl; } B;
+	struct { uint16	d, xPC; } W;
+#endif
+    uint32	xPBPC;
+}	PC_t;
 
-	return ret;
-}
-
-u16 SPC_IORead16(u16 addr)
+struct SRegisters
 {
-	u16 ret = 0;
-	switch (addr)
-	{
-		case 0xF4: ret = *(u16*)&SPC_IOPorts[0]; break;
-		case 0xF6: ret = *(u16*)&SPC_IOPorts[2]; break;
-		
-		default:
-			ret = SPC_IORead8(addr);
-			ret |= ((u16)SPC_IORead8(addr+1) << 8);
-			break;
-	}
+	uint8	DB;
+	pair	P;
+	pair	A;
+	pair	D;
+	pair	S;
+	pair	X;
+	pair	Y;
+	PC_t	PC;
+};
 
-	return ret;
-}
+#define AL		A.B.l
+#define AH		A.B.h
+#define XL		X.B.l
+#define XH		X.B.h
+#define YL		Y.B.l
+#define YH		Y.B.h
+#define SL		S.B.l
+#define SH		S.B.h
+#define DL		D.B.l
+#define DH		D.B.h
+#define PL		P.B.l
+#define PH		P.B.h
+#define PBPC	PC.xPBPC
+#define PCw		PC.W.xPC
+#define PCh		PC.B.xPCh
+#define PCl		PC.B.xPCl
+#define PB		PC.B.xPB
 
-void SPC_IOWrite8(u16 addr, u8 val)
-{
-	switch (addr)
-	{
-		case 0xF0:
-			if (val != 0x0A) bprintf("!! SPC CONFIG F0 = %02X\n", val);
-			break;
-			
-		case 0xF1:
-			{
-				SPC_TimerEnable = val & 0x07;
-				
-				if (!(val & 0x01)) 
-					SPC_TimerVal[0].Val = 0;
-				else
-					SPC_TimerVal[0].Val = SPC_TimerReload[0];
-					
-				if (!(val & 0x02)) 
-					SPC_TimerVal[1].Val = 0;
-				else
-					SPC_TimerVal[1].Val = SPC_TimerReload[1];
-					
-				if (!(val & 0x04)) 
-					SPC_TimerVal[2].Val = 0;
-				else
-					SPC_TimerVal[2].Val = SPC_TimerReload[2];
-				
-				if (val & 0x10) *(u16*)&SPC_IOPorts[0] = 0x0000;
-				if (val & 0x20) *(u16*)&SPC_IOPorts[2] = 0x0000;
-				
-				SPC_ROMAccess = (val & 0x80) ? 1:0;
-			}
-			break;
-			
-		case 0xF2: SPC_DSPAddr = val; break;
-		case 0xF3: DspWriteByte(val, SPC_DSPAddr); break;
-			
-		case 0xF4: SPC_IOPorts[4] = val; break;
-		case 0xF5: SPC_IOPorts[5] = val; break;
-		case 0xF6: SPC_IOPorts[6] = val; break;
-		case 0xF7: SPC_IOPorts[7] = val; break;
-		
-		case 0xF8:
-		case 0xF9:
-			if (val) bprintf("what?\n");
-			break;
-		
-		case 0xFA: SPC_TimerReload[0] = 0x10000 - (val << 7); break;
-		case 0xFB: SPC_TimerReload[1] = 0x10000 - (val << 7); break;
-		case 0xFC: SPC_TimerReload[2] = 0x10000 - (val << 4); break;
-	}
-}
+extern struct SRegisters	Registers;
 
-void SPC_IOWrite16(u16 addr, u16 val)
-{
-	switch (addr)
-	{
-		case 0xF4: *(u16*)&SPC_IOPorts[4] = val; break;
-		case 0xF6: *(u16*)&SPC_IOPorts[6] = val; break;
-		
-		default:
-			SPC_IOWrite8(addr, val & 0xFF);
-			SPC_IOWrite8(addr+1, val >> 8);
-			break;
-	}
-}
+#endif
+
